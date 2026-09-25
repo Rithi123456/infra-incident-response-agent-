@@ -17,8 +17,8 @@ Together, they demonstrate a complete specialization in **Operations & Incident 
                                   │
                                   ▼
                      ┌────────────────────────┐
-                     │ Autonomous Agent Loop  │◄───┐
-                     │ (Diagnose ➔ Plan ➔ Act) │    │ Retry /
+                     │   LangGraph / Raw Loop │◄───┐
+                     │ (Diagnose & Reason)    │    │ Retry /
                      └───────────┬────────────┘    │ Alternate
                                  │                 │
                ┌─────────────────┴────────────────┐│
@@ -27,7 +27,7 @@ Together, they demonstrate a complete specialization in **Operations & Incident 
      - check_service_status                       │
      - get_metrics                                ▼
      - query_logs                    ┌─────────────────────────┐
-     - get_deployment_history        │ Non-LLM Guardrail Layer │
+     - get_deployment_history        │ Non-LLM Guardrail Gate  │
                                      │ (Deterministic Engine)  │
                                      └────────────┬────────────┘
                                                   │
@@ -36,16 +36,23 @@ Together, they demonstrate a complete specialization in **Operations & Incident 
                               [ VETOED ]                   [ ALLOWED ]
                                     │                           │
                                     ▼                           ▼
-                        [ Structured Escalation ]      [ Mock Environment ]
+                        [ Structured Escalation ]      [ Execute Mutation ]
                         - Blast radius protection      - restart_service
                         - Tier-1 DB isolation          - rollback_deployment
                         - SRE handoff memo             - scale_replicas
                                                                 │
                                                                 ▼
-                                                       [ Health Verified? ]
+                                                       [ Verify Health ]
                                                        ├─ YES ➔ RESOLVED
                                                        └─ NO  ➔ Loop / Escalate
 ```
+
+### Dual-Engine Design: First-Principles + Framework Fluency
+
+1. **Raw Python Core (`agent/loop.py`)**:
+   - Zero-dependency, transparent control loop managing state transitions, tool execution budgets, and deterministic guardrail gates. Proves you understand agent mechanics from scratch without library crutches.
+2. **LangGraph StateGraph (`agent/graph.py`)**:
+   - Industry-standard graph orchestration mapping state transitions into explicit nodes (`diagnose_and_decide`, `guardrail_gate`, `execute_remediation`, `verify_health`, `escalate`) and conditional branching edges.
 
 ---
 

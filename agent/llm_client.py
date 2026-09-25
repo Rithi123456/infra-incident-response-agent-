@@ -48,7 +48,7 @@ class ResilientLLMClient:
                 print("WARNING: GROQ_API_KEY not found in environment.")
             self.client = Groq(api_key=api_key)
             if not self.model:
-                self.model = "llama-3.3-70b-versatile"
+                self.model = "openai/gpt-oss-120b"
 
         elif self.provider == "openai":
             from openai import OpenAI

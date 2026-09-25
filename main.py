@@ -42,7 +42,7 @@ def check_api_key():
     return True
 
 
-def run_single_incident(scenario_id: str, simulated: bool = False):
+def run_single_incident(scenario_id: str, simulated: bool = False, engine: str = "raw"):
     if scenario_id not in SCENARIOS:
         print(f"Error: Unknown scenario ID '{scenario_id}'. Available: {list(SCENARIOS.keys())}")
         return
@@ -50,7 +50,8 @@ def run_single_incident(scenario_id: str, simulated: bool = False):
     scenario = SCENARIOS[scenario_id]
     print(f"\n📋 Loading Scenario [{scenario.id}]: {scenario.name}")
     print(f"📝 Description: {scenario.description}")
-    print(f"🎯 Target Service: {scenario.target_service}\n")
+    print(f"🎯 Target Service: {scenario.target_service}")
+    print(f"⚙️  Engine Mode   : {engine.upper()} ({'SIMULATED' if simulated else 'LIVE LLM'})\n")
 
     env = MockEnvironment()
     alert = inject_scenario(env, scenario_id)
@@ -61,7 +62,7 @@ def run_single_incident(scenario_id: str, simulated: bool = False):
     print(f"   - Metric: {alert.trigger_metric} = {alert.trigger_value} (Threshold: {alert.threshold})")
     print(f"   - Summary: {alert.summary}\n")
 
-    print(f"🤖 Agent initiating autonomous diagnose-act-verify loop ({'SIMULATED' if simulated else 'LIVE LLM'})...\n")
+    print(f"🤖 Agent initiating autonomous diagnose-act-verify loop...\n")
 
     if simulated:
         from agent.simulated_client import ScriptedScenarioLLMClient
@@ -69,7 +70,12 @@ def run_single_incident(scenario_id: str, simulated: bool = False):
     else:
         client = ResilientLLMClient()
 
-    agent = IncidentResponseAgent(llm_client=client)
+    if engine.lower() == "langgraph":
+        from agent.graph import LangGraphIncidentAgent
+        agent = LangGraphIncidentAgent(llm_client=client)
+    else:
+        agent = IncidentResponseAgent(llm_client=client)
+
     session = agent.run(env, alert)
 
     print("=" * 60)
@@ -114,6 +120,7 @@ def main():
     parser.add_argument("--scenario", type=str, help="Run specific scenario (e.g. INC-001, INC-002, INC-003, INC-004, INC-005)")
     parser.add_argument("--eval", action="store_true", help="Run full benchmark evaluation across all scenarios")
     parser.add_argument("--simulated", action="store_true", help="Run in offline deterministic simulation mode (no API key required)")
+    parser.add_argument("--engine", type=str, default="raw", choices=["raw", "langgraph"], help="Orchestration engine: 'raw' (pure Python) or 'langgraph'")
     args = parser.parse_args()
 
     if not args.simulated and not check_api_key():
@@ -128,21 +135,25 @@ def main():
             runner = BenchmarkRunner(use_simulated=True)
         else:
             client = ResilientLLMClient()
-            agent = IncidentResponseAgent(llm_client=client)
+            if args.engine == "langgraph":
+                from agent.graph import LangGraphIncidentAgent
+                agent = LangGraphIncidentAgent(llm_client=client)
+            else:
+                agent = IncidentResponseAgent(llm_client=client)
             runner = BenchmarkRunner(agent)
         summary = runner.run_benchmark()
         print(summary.render_table())
     elif args.scenario:
-        run_single_incident(args.scenario, simulated=args.simulated)
+        run_single_incident(args.scenario, simulated=args.simulated, engine=args.engine)
     else:
         print("Available benchmark scenarios:")
         for sc_id, sc in SCENARIOS.items():
             print(f"  • {sc.id}: {sc.name} ({sc.target_service})")
         print("\nUsage:")
-        print("  python main.py --scenario INC-001 --simulated   # Test offline simulated demonstration")
-        print("  python main.py --eval --simulated               # Run offline benchmark eval suite")
-        print("  python main.py --scenario INC-001               # Run live with Groq / OpenAI")
-        print("  python main.py --eval                           # Run live evaluation suite")
+        print("  python main.py --scenario INC-001 --engine raw          # Pure Python raw loop")
+        print("  python main.py --scenario INC-001 --engine langgraph    # LangGraph StateGraph engine")
+        print("  python main.py --scenario INC-001 --simulated           # Offline simulated run")
+        print("  python main.py --eval                                   # Full eval benchmark")
 
 
 if __name__ == "__main__":
