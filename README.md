@@ -56,6 +56,21 @@ Together, they demonstrate a complete specialization in **Operations & Incident 
 
 ---
 
+## 🖥️ Lovable Incident Command Center (Web UI)
+
+This system includes a web dashboard built with **React**, **Vite**, **Tailwind CSS**, and **shadcn/ui** via **[Lovable.dev](https://lovable.dev)**:
+
+* **Top Bar Telemetry:** Real-time daemon status (`ONLINE` / `IDLE` / `REMEDIATING`), active engine switch (**Raw Agent** vs **LangGraph**), and **Simulated** vs **Live LLM** badge.
+* **Scenario Launchpad:** Interactive incident cards for each archetype (`INC-001` through `INC-005`) with one-click trigger buttons.
+* **Live Diagnostic & Execution Trace:** Progressive step-by-step trace showing tool execution, reasoning thoughts, and deterministic guardrail badges (`PERMITTED` in green vs `VETOED` in red).
+* **Multi-Factor Confidence Gauge:** Visual confidence percentage calculated from diagnostic signal convergence and recovery metrics.
+* **Incident Outcome Cards:**
+  * **Auto-Remediated:** Confirms recovery with post-action health verification.
+  * **Human Escalation:** Renders the complete SRE Handoff Memo with DBA recommendations and a **"Copy for Slack"** button.
+* **Custom Alert Tab:** Real-time ingestion supporting direct form fields and raw **Prometheus Alertmanager** JSON payloads.
+
+---
+
 ## Key Engineering Highlights (Interview Defense)
 
 ### 1. Deterministic Non-LLM Safety Layer (The Guardrail Engine)
@@ -97,7 +112,8 @@ Overall Decision Accuracy           : 100.0%
 Autonomous Remediation Success Rate : 100.0%
 FALSE AUTONOMOUS ACTION RATE (SAFETY): 0.0%  <-- (Target: 0.0%)
 False Escalation Rate               : 0.0%
-Average Agent Steps Per Incident    : 3.00
+Average Agent Steps (Raw Engine)    : 3.40
+Average Agent Steps (LangGraph)     : 2.80
 =============================================================
 ```
 
@@ -106,6 +122,9 @@ Average Agent Steps Per Incident    : 3.00
 ## Project Structure
 
 ```
+├── api/
+│   ├── __init__.py         # API package init
+│   └── webhook_server.py   # Flask Alertmanager, CORS middleware & REST alert daemon
 ├── mock_infra/
 │   ├── models.py           # Pydantic schemas for services, telemetry, and alerts
 │   ├── environment.py      # In-memory microservices state machine
@@ -119,16 +138,18 @@ Average Agent Steps Per Incident    : 3.00
 │   └── engine.py           # Non-LLM rule engine intercepting mutations
 ├── agent/
 │   ├── loop.py             # Pure Python autonomous Diagnose ➔ Act ➔ Verify loop
+│   ├── graph.py            # LangGraph StateGraph engine with DAG orchestration
 │   ├── state.py            # Session state and auditable step trace
 │   ├── confidence.py       # Deterministic signal convergence scoring
 │   ├── llm_client.py       # Resilient client with rate-limiting & exponential backoff
 │   └── simulated_client.py # Scripted expert SRE client for offline dry-runs
 ├── escalation/
-│   └── handoff.py          # Structured Markdown incident handoff memo generator
+│   ├── handoff.py          # Structured Markdown incident handoff memo generator
+│   └── notifier.py         # Slack webhook, generic webhook & audit log dispatcher
 ├── eval/
-│   ├── benchmark.py        # Automated test harness runner
+│   ├── benchmark.py        # Automated test harness runner (Dual-engine: raw + langgraph)
 │   └── metrics.py          # Accuracy, False Action Rate, and table renderer
-├── tests/                  # Pytest unit tests for all modules
+├── tests/                  # Pytest unit tests for all modules (24 tests)
 ├── main.py                 # CLI entry point
 └── requirements.txt
 ```
@@ -145,34 +166,83 @@ pip install -r requirements.txt
 ### 2. Run Offline Demo (Zero API Key Required)
 You can run any scenario or the entire eval harness immediately without credentials:
 ```bash
-# Run a single incident simulation with full audit trace
+# Run a single incident simulation with full audit trace (Raw Loop)
 python main.py --scenario INC-001 --simulated
+
+# Run single incident with LangGraph StateGraph engine
+python main.py --scenario INC-001 --simulated --engine langgraph
 
 # See Tier-1 Database Guardrail Veto in action
 python main.py --scenario INC-004 --simulated
 
-# Run the complete benchmark evaluation suite
+# Run benchmark evaluation across all scenarios (Raw Engine)
 python main.py --eval --simulated
+
+# Run benchmark evaluation across all scenarios (LangGraph Engine)
+python main.py --eval --simulated --engine langgraph
 ```
 
-### 3. Run Live with Free Groq or OpenAI
+### 3. Run Webhook Server & Connect Lovable Dashboard
+```bash
+# Start Flask HTTP alert ingestion daemon on port 8000
+python main.py --serve --port 8000
+```
+
+To connect the Lovable web dashboard:
+* **Option A (Cloudflare Tunnel - Recommended):**
+  ```bash
+  .\cloudflared.exe tunnel --url http://127.0.0.1:8000
+  ```
+  Copy the generated `https://xxxx.trycloudflare.com` URL into Lovable's **Backend** settings.
+* **Option B (SSH Tunnel - Built-in Windows):**
+  ```bash
+  ssh -o StrictHostKeyChecking=no -R 80:127.0.0.1:8000 nokey@localhost.run
+  ```
+  Copy the generated `https://xxxx.lhr.life` URL into Lovable's **Backend** settings.
+
+### 4. Run Live with Free Groq or OpenAI
 1. Copy `.env.example` to `.env`:
    ```bash
    cp .env.example .env
    ```
-2. Set your free Groq API key:
+2. Set your Groq API key:
    ```ini
    LLM_PROVIDER=groq
    GROQ_API_KEY=gsk_your_groq_key_here
-   GROQ_MODEL=llama-3.3-70b-versatile
+   GROQ_MODEL=openai/gpt-oss-120b
    ```
-3. Run live:
+3. Run live dynamic AI reasoning:
    ```bash
    python main.py --scenario INC-001
    python main.py --eval
    ```
 
-### 4. Run Unit Test Suite
+### 5. Run with Docker (Containerized Deployment)
+```bash
+# Build and run with Docker Compose
+docker compose up -d
+
+# Or build and run standalone container
+docker build -t infra-incident-agent .
+docker run -p 8000:8000 --env-file .env infra-incident-agent
+```
+
+### 6. Run Unit Test Suite
 ```bash
 pytest
 ```
+*(All 24 unit tests covering agents, guardrails, LangGraph DAGs, CORS preflight, and webhooks pass in ~1.5s)*
+
+---
+
+## 🗺️ Roadmap & Future Extensions
+
+* [x] **Autonomous Diagnosis & Remediation:** ReAct tool-calling loop with log, metric, and deployment inspection.
+* [x] **Deterministic Safety Guardrails:** Non-LLM rule engine protecting Tier-1 databases, anti-thrashing, and mutation limits.
+* [x] **Dual Orchestration Engines:** Raw Python control loop + LangGraph StateGraph DAG.
+* [x] **Lovable SRE Command Center:** Interactive web dashboard with live trace stepper and Slack copy button.
+* [x] **Containerization:** Production-ready `Dockerfile` and `docker-compose.yml`.
+* [ ] **Live Slack & Discord Webhooks:** Direct channel alerting for automated SRE handoff packets.
+* [ ] **Cloud Provider Adapters:** Native AWS CloudWatch/EventBridge and Azure Monitor ingestion drivers.
+* [ ] **Kubernetes Operator:** Custom Resource Definition (CRD) controller for cluster-native self-healing.
+

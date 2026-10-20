@@ -256,6 +256,23 @@ class IncidentResponseAgent:
 
                         if is_healthy:
                             session.status = SessionStatus.RESOLVED
+                            # Prompt the agent for final conclusion / post-remediation diagnosis
+                            try:
+                                final_resp = self.llm_client.generate_with_tools(messages=messages, tools=[])
+                                if final_resp and final_resp.content:
+                                    session.final_diagnosis = final_resp.content
+                                    session.trace.append(
+                                        StepTrace(
+                                            step_number=session.step_count + 1,
+                                            thought=final_resp.content,
+                                            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                        )
+                                    )
+                                    session.step_count += 1
+                            except Exception:
+                                pass
+                            if not session.final_diagnosis:
+                                session.final_diagnosis = response.content or "Service health successfully verified and recovered."
 
         # Check for loop step budget exhaustion
         if session.step_count >= session.max_steps and session.status == SessionStatus.IN_PROGRESS:

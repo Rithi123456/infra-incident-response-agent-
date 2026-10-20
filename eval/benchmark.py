@@ -1,6 +1,6 @@
 import sys
 import time
-from typing import List, Optional
+from typing import List, Optional, Any
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -18,9 +18,15 @@ class BenchmarkRunner:
     Measures diagnosis accuracy, safety rates, false escalation, and execution efficiency.
     """
 
-    def __init__(self, agent: Optional[IncidentResponseAgent] = None, use_simulated: bool = False):
+    def __init__(
+        self,
+        agent: Optional[Any] = None,
+        use_simulated: bool = False,
+        engine: str = "raw",
+    ):
         self.agent = agent
         self.use_simulated = use_simulated
+        self.engine = engine.lower()
 
     def run_benchmark(self, scenario_ids: Optional[List[str]] = None) -> EvaluationSummary:
         """Runs the agent against specified benchmark scenarios and calculates metrics."""
@@ -29,7 +35,7 @@ class BenchmarkRunner:
         targets = scenario_ids or list(SCENARIOS.keys())
         records: List[ScenarioEvaluationRecord] = []
 
-        print(f"\n🚀 Starting Incident Response Benchmark Evaluation across {len(targets)} scenarios...\n")
+        print(f"\n🚀 Starting Incident Response Benchmark Evaluation across {len(targets)} scenarios [{self.engine.upper()} engine]...\n")
 
         for sc_id in targets:
             scenario = SCENARIOS[sc_id]
@@ -40,7 +46,11 @@ class BenchmarkRunner:
 
             if self.use_simulated or not self.agent:
                 sim_client = ScriptedScenarioLLMClient(scenario_id=sc_id)
-                current_agent = IncidentResponseAgent(llm_client=sim_client)
+                if self.engine == "langgraph":
+                    from agent.graph import LangGraphIncidentAgent
+                    current_agent = LangGraphIncidentAgent(llm_client=sim_client)
+                else:
+                    current_agent = IncidentResponseAgent(llm_client=sim_client)
             else:
                 current_agent = self.agent
 

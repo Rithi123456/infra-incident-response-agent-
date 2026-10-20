@@ -1,6 +1,7 @@
 import os
 import sys
 import argparse
+from typing import Optional
 
 # Ensure UTF-8 output on Windows consoles
 if hasattr(sys.stdout, "reconfigure"):
@@ -42,7 +43,13 @@ def check_api_key():
     return True
 
 
-def run_single_incident(scenario_id: str, simulated: bool = False, engine: str = "raw"):
+def run_single_incident(
+    scenario_id: str,
+    simulated: bool = False,
+    engine: str = "raw",
+    audit_file: Optional[str] = None,
+    slack_webhook: Optional[str] = None,
+):
     if scenario_id not in SCENARIOS:
         print(f"Error: Unknown scenario ID '{scenario_id}'. Available: {list(SCENARIOS.keys())}")
         return
@@ -112,6 +119,14 @@ def run_single_incident(scenario_id: str, simulated: bool = False, engine: str =
 
     if session.escalation_report:
         print("\n" + session.escalation_report.to_markdown())
+        from escalation.notifier import EscalationNotifier
+        notifier = EscalationNotifier()
+        if audit_file:
+            path = notifier.save_to_audit_file(session.escalation_report, filepath=audit_file)
+            print(f"📁 Escalation report archived to: {path}")
+        if slack_webhook:
+            ok = notifier.dispatch_to_slack(session.escalation_report, webhook_url=slack_webhook)
+            print(f"📡 Slack Notification: {'Dispatched successfully ✅' if ok else 'Delivery failed ❌'}")
 
 
 def main():
@@ -121,7 +136,17 @@ def main():
     parser.add_argument("--eval", action="store_true", help="Run full benchmark evaluation across all scenarios")
     parser.add_argument("--simulated", action="store_true", help="Run in offline deterministic simulation mode (no API key required)")
     parser.add_argument("--engine", type=str, default="raw", choices=["raw", "langgraph"], help="Orchestration engine: 'raw' (pure Python) or 'langgraph'")
+    parser.add_argument("--serve", action="store_true", help="Run HTTP alert ingestion webhook daemon")
+    parser.add_argument("--port", type=int, default=8000, help="Port for the webhook daemon (default: 8000)")
+    parser.add_argument("--audit-file", type=str, default=None, help="File path to save escalation handoff markdown memos")
+    parser.add_argument("--slack-webhook", type=str, default=None, help="Slack incoming webhook URL for escalation notifications")
     args = parser.parse_args()
+
+    if args.serve:
+        from api.webhook_server import run_server
+        is_sim = args.simulated or not check_api_key()
+        run_server(port=args.port, simulated=is_sim, engine=args.engine)
+        return
 
     if not args.simulated and not check_api_key():
         print("Please configure your .env file or run with `--simulated` for an offline demonstration.")
@@ -132,7 +157,7 @@ def main():
 
     if args.eval:
         if args.simulated:
-            runner = BenchmarkRunner(use_simulated=True)
+            runner = BenchmarkRunner(use_simulated=True, engine=args.engine)
         else:
             client = ResilientLLMClient()
             if args.engine == "langgraph":
@@ -140,11 +165,17 @@ def main():
                 agent = LangGraphIncidentAgent(llm_client=client)
             else:
                 agent = IncidentResponseAgent(llm_client=client)
-            runner = BenchmarkRunner(agent)
+            runner = BenchmarkRunner(agent=agent, engine=args.engine)
         summary = runner.run_benchmark()
         print(summary.render_table())
     elif args.scenario:
-        run_single_incident(args.scenario, simulated=args.simulated, engine=args.engine)
+        run_single_incident(
+            args.scenario,
+            simulated=args.simulated,
+            engine=args.engine,
+            audit_file=args.audit_file,
+            slack_webhook=args.slack_webhook,
+        )
     else:
         print("Available benchmark scenarios:")
         for sc_id, sc in SCENARIOS.items():
@@ -153,7 +184,9 @@ def main():
         print("  python main.py --scenario INC-001 --engine raw          # Pure Python raw loop")
         print("  python main.py --scenario INC-001 --engine langgraph    # LangGraph StateGraph engine")
         print("  python main.py --scenario INC-001 --simulated           # Offline simulated run")
-        print("  python main.py --eval                                   # Full eval benchmark")
+        print("  python main.py --eval --simulated --engine langgraph    # LangGraph benchmark eval")
+        print("  python main.py --serve --port 8000                      # Alertmanager Webhook Server")
+        print("  python main.py --scenario INC-004 --audit-file log.md   # Escalate and archive audit memo")
 
 
 if __name__ == "__main__":

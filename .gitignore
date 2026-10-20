@@ -14,3 +14,9 @@ ENV/
 # IDE
 .vscode/
 .idea/
+
+# Logs
+*.log
+
+# Binaries
+*.exe
