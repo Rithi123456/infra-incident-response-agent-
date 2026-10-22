@@ -29,10 +29,11 @@ def test_list_scenarios(client):
     response = client.get("/api/v1/scenarios")
     assert response.status_code == 200
     data = response.get_json()
-    assert data["total"] == 5
+    assert data["total"] == 6
     scenario_ids = [s["id"] for s in data["scenarios"]]
     assert "INC-001" in scenario_ids
     assert "INC-004" in scenario_ids
+    assert "INC-006" in scenario_ids
 
 
 def test_ingest_alert_scenario_resolved(client):

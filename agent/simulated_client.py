@@ -121,4 +121,28 @@ class ScriptedScenarioLLMClient(ResilientLLMClient):
                     tool_calls=[],
                 )
 
+        elif self.scenario_id == "INC-006":
+            # Flash crowd traffic surge (Scale replicas)
+            if self.step == 1:
+                return LLMResponse(
+                    content="High P99 latency and CPU spike detected on web-api. Querying error and load logs.",
+                    tool_calls=[ToolCall(id="c1", name="query_logs", arguments={"service_name": "web-api", "limit": 5})],
+                )
+            elif self.step == 2:
+                return LLMResponse(
+                    content="Logs confirm 15,200 req/sec traffic surge causing ThreadPool starvation (200/200 active). Inspecting service replica capacity.",
+                    tool_calls=[ToolCall(id="c2", name="check_service_status", arguments={"service_name": "web-api"})],
+                )
+            elif self.step == 3:
+                return LLMResponse(
+                    content="Currently running only 3 replicas for web-api. Proposing horizontal scale-out from 3 to 6 pod replicas to absorb traffic load.",
+                    tool_calls=[ToolCall(id="c3", name="scale_replicas", arguments={"service_name": "web-api", "target_replicas": 6})],
+                )
+            else:
+                return LLMResponse(
+                    content="Scale-out confirmed. Service replica count is now 6. CPU utilization decreased to 35% and P99 latency normalized to 60ms. Incident RESOLVED.",
+                    tool_calls=[],
+                )
+
         return LLMResponse(content="Evaluation complete.", tool_calls=[])
+

@@ -156,7 +156,7 @@ class IncidentResponseAgent:
                             # Check if log messages reveal external third-party issues
                             for e in obs:
                                 msg_lower = e.get("message", "").lower()
-                                if "stripe" in msg_lower or "upstream" in msg_lower or "connection refused" in msg_lower:
+                                if "stripe" in msg_lower or "upstream vendor" in msg_lower or "third-party" in msg_lower or "external provider" in msg_lower:
                                     is_external_dependency = True
 
                     elif tool_name in ("check_service_status", "get_metrics"):

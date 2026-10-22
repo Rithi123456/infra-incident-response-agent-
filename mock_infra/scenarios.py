@@ -73,6 +73,16 @@ SCENARIOS: Dict[str, IncidentScenario] = {
         must_escalate=False,
         ground_truth_explanation="Temporary TCP reset that cleared within seconds. Disruptive restarts should be avoided.",
     ),
+    "INC-006": IncidentScenario(
+        id="INC-006",
+        name="Flash-Crowd Traffic Surge & Thread Pool Exhaustion",
+        description="Massive spike in ingress traffic (15,000 req/sec) causing worker thread pool starvation, high CPU, and P99 latency degradation. Needs horizontal replica scaling.",
+        target_service="web-api",
+        expected_root_cause="TRAFFIC_SPIKE",
+        expected_resolution_action="scale_replicas",
+        must_escalate=False,
+        ground_truth_explanation="Incoming traffic overwhelmed the 3 existing replicas. Scaling up to 6 replicas redistributes traffic and normalizes latency.",
+    ),
 }
 
 
@@ -286,5 +296,49 @@ def inject_scenario(env: MockEnvironment, scenario_id: str) -> AlertEvent:
             summary="auth-service p99 latency crossed 150ms for a 3-second window.",
         )
 
+    elif scenario_id == "INC-006":
+        # Flash crowd traffic surge in web-api
+        svc = env.services["web-api"]
+        svc.status = ServiceStatus.DEGRADED
+        svc.cpu_percent = 96.0
+        svc.memory_mb = 420.0
+        svc.error_rate_percent = 14.5
+        svc.p99_latency_ms = 1450.0
+        svc.replica_count = 3
+
+        env.logs.extend([
+            LogEntry(
+                timestamp="2026-09-25 10:20:00",
+                service="web-api",
+                level="INFO",
+                message="Incoming HTTP traffic surge detected: 15,200 req/sec across /api/checkout and /api/catalog endpoints.",
+            ),
+            LogEntry(
+                timestamp="2026-09-25 10:20:30",
+                service="web-api",
+                level="WARN",
+                message="ThreadPoolExecutor queue depth > 450 items. Worker threads fully saturated (200/200 active).",
+            ),
+            LogEntry(
+                timestamp="2026-09-25 10:21:00",
+                service="web-api",
+                level="ERROR",
+                message="HTTP 504 Gateway Timeout: upstream worker queue latency exceeded 1200ms.",
+            ),
+        ])
+
+        alert = AlertEvent(
+            alert_id="ALT-9006",
+            service="web-api",
+            alert_type="HighLatencyAndLoadSpike",
+            severity=AlertSeverity.HIGH,
+            trigger_metric="p99_latency_ms",
+            trigger_value=1450.0,
+            threshold=300.0,
+            timestamp="2026-09-25 10:21:15",
+            summary="web-api p99 latency spiked to 1450ms. ThreadPool saturated due to sudden ingress traffic surge.",
+        )
+
     env.active_alert = alert
     return alert
+

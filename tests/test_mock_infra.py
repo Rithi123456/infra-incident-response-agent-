@@ -50,3 +50,20 @@ def test_inject_scenario_upstream_outage():
     # Neither restart nor rollback should fix upstream outage
     assert env.restart_service("payment-gateway").success is False
     assert env.rollback_deployment("payment-gateway").success is False
+
+
+def test_inject_scenario_traffic_spike():
+    env = MockEnvironment()
+    alert = inject_scenario(env, "INC-006")
+    assert alert.service == "web-api"
+    assert env.services["web-api"].status == ServiceStatus.DEGRADED
+    assert env.services["web-api"].cpu_percent > 90.0
+
+    # Restart should NOT fix traffic spike
+    restart_res = env.restart_service("web-api")
+    # Scaling replicas SHOULD fix traffic spike
+    scale_res = env.scale_replicas("web-api", 6)
+    assert scale_res.success is True
+    assert env.services["web-api"].replica_count == 6
+    assert env.is_service_recovered("web-api") is True
+

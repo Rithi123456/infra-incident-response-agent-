@@ -228,6 +228,10 @@ class MockEnvironment:
             # Restarting local service does NOT fix external vendor
             msg = f"Service '{service_name}' restarted, but downstream upstream vendor still returning 503 Gateway Errors."
             success = False
+        elif self.hidden_root_cause == "TRAFFIC_SPIKE":
+            # Restarting does not absorb traffic surge
+            msg = f"Service '{service_name}' restarted, but high incoming traffic load still saturates worker threads. Status remains degraded."
+            success = False
         else:
             # Baseline restart behavior
             svc.status = ServiceStatus.HEALTHY
@@ -319,6 +323,7 @@ class MockEnvironment:
         if self.hidden_root_cause == "TRAFFIC_SPIKE":
             svc.status = ServiceStatus.HEALTHY
             svc.cpu_percent = 35.0
+            svc.error_rate_percent = 0.05
             svc.p99_latency_ms = 60.0
             msg = f"Scaled '{service_name}' from {old_count} to {target_replicas} replicas. Latency and CPU normalized."
             success = True
